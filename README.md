@@ -1,7 +1,7 @@
 # image-annotate-mcp
 
 A tiny image annotator that runs inside AI chat apps (Claude, ChatGPT) as an [MCP App](https://github.com/modelcontextprotocol/ext-apps).
-Paste a screenshot, then highlight, box, check or mosaic parts of it — by hand or by asking the agent ("mosaic the email address").
+Paste a screenshot, then highlight, box, check, mosaic or redact (solid box) parts of it — by hand or by asking the agent ("mosaic the email address").
 
 ![drag preview](docs/drag-preview.png)
 
@@ -19,7 +19,7 @@ Paste a screenshot, then highlight, box, check or mosaic parts of it — by hand
 | Tool | Purpose |
 | --- | --- |
 | `open_annotator` | Opens the annotator UI |
-| `apply_marks` | `{ marks: [{ type: "highlight" \| "rect" \| "check" \| "mosaic", x, y, w, h }] }` in image pixels |
+| `apply_marks` | `{ marks: [{ type: "highlight" \| "rect" \| "check" \| "mosaic" \| "redact", x, y, w, h, color?, strength? }] }` in image pixels |
 
 ## Develop
 

@@ -46,6 +46,10 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   const px2 = await fr.evaluate(() => { const g = document.getElementById("cv").getContext("2d"); const p = (x, y) => [...g.getImageData(x, y, 1, 1).data].slice(0, 3).join(","); return [p(20, 115), p(240, 115)]; });
   ok(px2[0] === "0,0,255", "agent colour applied"); ok(px2[1] === "225,29,29", "invalid colour ignored");
   ok((await fr.textContent("#undo")) === "Undo", "undo label (en)");
+  // redact: fully opaque black by default, from the agent
+  await pg.evaluate(() => bridge.sendToolResult({ content: [], structuredContent: { marks: [{ type: "redact", x: 0, y: 0, w: 40, h: 40 }] } }));
+  await pg.waitForTimeout(150);
+  ok(await fr.evaluate(() => { const d = document.getElementById("cv").getContext("2d").getImageData(0, 0, 40, 40).data; for (let i = 0; i < d.length; i += 4) if (d[i] || d[i + 1] || d[i + 2] || d[i + 3] !== 255) return false; return true; }), "redact covers the area with opaque black");
   await fr.click("#export"); await pg.waitForTimeout(200);
   const dl = await pg.evaluate(() => __log.filter(e => e.ev === "download"));
   ok(dl.length === 1 && dl[0].mime === "image/png", "export sends PNG via ui/download-file");
@@ -76,6 +80,8 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   await pg.mouse.move(...Q(100, 100)); await pg.mouse.down(); await pg.mouse.move(...Q(300, 300), { steps: 3 }); await pg.mouse.up();
   ok(await fr.evaluate(() => [...document.getElementById("cv").getContext("2d").getImageData(100, 200, 1, 1).data].slice(0, 3).join()) === "0,255,0", "colour picker sets drawn colour");
   const blockRun = async (lvl) => { await fr.click("#undo"); await fr.click('[data-tool="mosaic"]'); await fr.fill("#strength", String(lvl));
+    // the toolbar can re-wrap when controls swap, so re-measure the canvas
+    const b3 = await (await fr.$("#ov")).boundingBox(); const k3 = b3.width / 1600; const Q = (x, y) => [b3.x + x * k3, b3.y + y * k3];
     await pg.mouse.move(...Q(0, 0)); await pg.mouse.down(); await pg.mouse.move(...Q(800, 50), { steps: 3 }); await pg.mouse.up();
     // count colour changes along a row: fewer changes = bigger blocks
     return fr.evaluate(() => { const d = document.getElementById("cv").getContext("2d").getImageData(0, 10, 800, 1).data; let n = 0; for (let i = 4; i < d.length; i += 4) if (d[i] !== d[i - 4]) n++; return n; }); };

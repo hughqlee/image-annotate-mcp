@@ -7,12 +7,12 @@ let loaded = false, tool = "rect", undo = [], start = null;
 
 // ---------- i18n + theme ----------
 const T = {
-  en: { open: "Open image", highlight: "Highlight", rect: "Box", check: "Check", mosaic: "Mosaic", undo: "Undo", export: "Export", color: "Colour", strength: "Strength",
+  en: { open: "Open image", highlight: "Highlight", rect: "Box", check: "Check", mosaic: "Mosaic", redact: "Redact", undo: "Undo", export: "Export", color: "Colour", strength: "Strength",
         hint: "Paste (Ctrl+V), drop, or open an image", connected: "Ready", loaded: (w, h) => `Loaded ${w}×${h}`,
         selected: n => `${n}: drag to select an area`, applied: (n, w, h) => `${n} applied ${w}×${h}`, tooSmall: "Area too small, cancelled",
         cancelled: "Drag cancelled", agent: "Applied marks from Claude", agentRestored: "Applied marks from Claude (image restored)",
         live: "Applied live marks", exported: "Exported", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
-  ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", undo: "되돌리기", export: "내보내기", color: "색상", strength: "강도",
+  ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", redact: "가리기", undo: "되돌리기", export: "내보내기", color: "색상", strength: "강도",
         hint: "이미지를 붙여넣기(Ctrl+V), 드래그하거나 열어 주세요", connected: "준비됨", loaded: (w, h) => `불러옴 ${w}×${h}`,
         selected: n => `${n}: 드래그로 영역 지정`, applied: (n, w, h) => `${n} 적용 ${w}×${h}`, tooSmall: "영역이 너무 작아 취소됨",
         cancelled: "드래그 취소", agent: "Claude 표시 적용", agentRestored: "Claude 표시 적용 (이미지 복원)",
@@ -50,7 +50,7 @@ app.onhostcontextchanged = applyHost;
 const toolBtns = document.querySelectorAll("[data-tool]");
 // per-tool colour, remembered for the session; mosaic has no colour, it has strength
 const HEX = /^#[0-9a-f]{6}$/i;
-const toolColor = { highlight: "#ffe600", rect: "#e11d1d", check: "#1aaa1a", mosaic: "#1f6feb" };
+const toolColor = { highlight: "#ffe600", rect: "#e11d1d", check: "#1aaa1a", mosaic: "#1f6feb", redact: "#000000" };
 const colorIn = $("color"), strengthIn = $("strength");
 function syncToolControls() {
   const isMosaic = tool === "mosaic";
@@ -101,7 +101,7 @@ document.addEventListener("drop", e => { e.preventDefault(); const f = e.dataTra
 const BLOCKS = [120, 80, 55, 35, 20];
 const UNDO_BYTES = 256 * 1024 * 1024; // keep undo history under ~256 MB
 export function applyMark(m) {
-  if (!["highlight", "rect", "check", "mosaic"].includes(m.type)) return;
+  if (!["highlight", "rect", "check", "mosaic", "redact"].includes(m.type)) return;
   const nums = [m.x, m.y, m.w, m.h];
   if (!nums.every(Number.isFinite)) return;
   undo.push(ctx.getImageData(0, 0, cv.width, cv.height));
@@ -110,6 +110,7 @@ export function applyMark(m) {
   const col = HEX.test(m.color || "") ? m.color : toolColor[m.type];
   if (m.type === "rect") { ctx.lineWidth = Math.max(3, cv.width / 300); ctx.strokeStyle = col; ctx.strokeRect(x, y, w, h); }
   else if (m.type === "highlight") { ctx.fillStyle = rgba(col, 0.4); ctx.fillRect(x, y, w, h); }
+  else if (m.type === "redact") { ctx.fillStyle = col; ctx.fillRect(x, y, w, h); } // fully opaque: nothing underneath survives export
   else if (m.type === "check") { ctx.lineWidth = Math.max(5, cv.width / 200); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = col; ctx.beginPath();
     ctx.moveTo(x, y + h * 0.55); ctx.lineTo(x + w * 0.4, y + h); ctx.lineTo(x + w, y); ctx.stroke(); }
   else if (m.type === "mosaic") {
@@ -139,6 +140,7 @@ function drawPreview(a, b, c, d) {
   const k = scale(), x = Math.min(a, c), y = Math.min(b, d), w = Math.abs(c - a), h = Math.abs(d - b), col = toolColor[tool];
   octx.fillStyle = "rgba(0,0,0,0.35)"; octx.fillRect(0, 0, ov.width, ov.height); octx.clearRect(x, y, w, h); // dim outside
   if (tool === "highlight") { octx.fillStyle = rgba(col, 0.4); octx.fillRect(x, y, w, h); }
+  if (tool === "redact") { octx.fillStyle = rgba(col, 0.6); octx.fillRect(x, y, w, h); }
   octx.lineWidth = 2 * k; octx.strokeStyle = "#fff"; octx.strokeRect(x, y, w, h);
   octx.setLineDash([6 * k, 4 * k]); octx.strokeStyle = col; octx.strokeRect(x, y, w, h); octx.setLineDash([]);
   const dot = (px, py, r) => { octx.beginPath(); octx.arc(px, py, r * k, 0, 7); octx.fillStyle = "#fff"; octx.fill(); octx.beginPath(); octx.arc(px, py, (r - 2) * k, 0, 7); octx.fillStyle = col; octx.fill(); };
@@ -160,7 +162,7 @@ ov.onpointercancel = e => endDrag(e, false);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && start) { endDrag(e, false); log("cancelled"); } });
 
 // ---------- agent ----------
-const MarkZ = z.object({ type: z.enum(["highlight", "rect", "check", "mosaic"]), x: z.number().finite(), y: z.number().finite(), w: z.number().finite().min(0), h: z.number().finite().min(0),
+const MarkZ = z.object({ type: z.enum(["highlight", "rect", "check", "mosaic", "redact"]), x: z.number().finite(), y: z.number().finite(), w: z.number().finite().min(0), h: z.number().finite().min(0),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), strength: z.number().int().min(1).max(5).optional() });
 app.registerTool("apply_marks_live", { description: "Draw marks on the image currently open in this annotator window (pixel coords).", inputSchema: z.object({ marks: z.array(MarkZ).max(200) }) },
   async ({ marks }) => { marks.forEach(applyMark); log("live"); return { content: [{ type: "text", text: `applied ${marks.length}` }] }; });
