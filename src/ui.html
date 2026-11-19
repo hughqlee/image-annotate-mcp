@@ -1,0 +1,25 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+:root{--bg:#ffffff;--fg:#1f2328;--muted:#59636e;--btn:#f6f8fa;--btn-bd:#d1d9e0;--accent:#1f6feb;--accent-fg:#ffffff;--canvas-bd:#d1d9e0;color-scheme:light}
+:root[data-theme="dark"]{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--btn:#21262d;--btn-bd:#3d444d;--accent:#4493f8;--accent-fg:#0d1117;--canvas-bd:#3d444d;color-scheme:dark}
+html,body{background:var(--bg);color:var(--fg)}
+body{font:14px system-ui,sans-serif;margin:8px}
+#bar{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.sep{flex:1}
+button,.file{padding:4px 10px;border:1px solid var(--btn-bd);border-radius:6px;background:var(--btn);color:var(--fg);cursor:pointer;font:inherit}
+button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
+.file input{display:none}
+#st{color:var(--muted);width:100%;min-height:1.2em}
+#wrap{position:relative;display:inline-block;max-width:100%;margin-top:4px;line-height:0}
+#cv{max-width:100%;border:1px solid var(--canvas-bd);display:block;background:var(--btn)}
+#ov{position:absolute;left:0;top:0;width:100%;height:100%;cursor:crosshair;touch-action:none}
+#hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:var(--muted);line-height:1.4;pointer-events:none;text-align:center;padding:8px}
+</style></head><body>
+<div id="bar">
+<label class="file"><input type="file" id="file" accept="image/*"><span data-i18n="open"></span></label>
+<button data-tool="highlight" data-i18n="highlight"></button><button data-tool="rect" data-i18n="rect" aria-pressed="true"></button><button data-tool="check" data-i18n="check"></button><button data-tool="mosaic" data-i18n="mosaic"></button>
+<button id="undo" data-i18n="undo"></button><button id="export" data-i18n="export"></button>
+<span class="sep"></span>
+<button id="lang" title="Language / 언어"></button><button id="theme"></button>
+<span id="st"></span></div>
+<div id="wrap"><canvas id="cv" width="480" height="240"></canvas><canvas id="ov"></canvas><div id="hint" data-i18n="hint"></div></div>
+<script type="module">/*BUNDLE*/</script></body></html>
