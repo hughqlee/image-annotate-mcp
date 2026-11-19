@@ -39,7 +39,13 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   await pg.evaluate(() => bridge.sendToolResult({ content: [], structuredContent: { marks: [{ type: "rect", x: 100, y: 20, w: 80, h: 50 }, { type: "highlight", x: 200, y: 20, w: 80, h: 50 }] } }));
   await pg.waitForTimeout(200);
   const px = await fr.evaluate(() => { const g = document.getElementById("cv").getContext("2d"); const p = (x, y) => [...g.getImageData(x, y, 1, 1).data].slice(0, 3).join(","); return [p(100, 40), p(205, 40)]; });
-  ok(px[0] === "238,17,17", "agent rect mark drawn"); ok(px[1].startsWith("255,"), "agent highlight mark drawn");
+  ok(px[0] === "225,29,29", "agent rect mark drawn"); ok(px[1].startsWith("255,"), "agent highlight mark drawn");
+  // agent-chosen colour; invalid colour falls back to the default
+  await pg.evaluate(() => bridge.sendToolResult({ content: [], structuredContent: { marks: [{ type: "rect", x: 20, y: 100, w: 40, h: 30, color: "#0000ff" }, { type: "rect", x: 240, y: 100, w: 40, h: 30, color: "red;}<script>" }] } }));
+  await pg.waitForTimeout(150);
+  const px2 = await fr.evaluate(() => { const g = document.getElementById("cv").getContext("2d"); const p = (x, y) => [...g.getImageData(x, y, 1, 1).data].slice(0, 3).join(","); return [p(20, 115), p(240, 115)]; });
+  ok(px2[0] === "0,0,255", "agent colour applied"); ok(px2[1] === "225,29,29", "invalid colour ignored");
+  ok((await fr.textContent("#undo")) === "Undo", "undo label (en)");
   await fr.click("#export"); await pg.waitForTimeout(200);
   const dl = await pg.evaluate(() => __log.filter(e => e.ev === "download"));
   ok(dl.length === 1 && dl[0].mime === "image/png", "export sends PNG via ui/download-file");
@@ -50,6 +56,7 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   const big = path.join(out, "big.png"); fs.writeFileSync(big, await png(pg, 1600, 900));
   await fr.setInputFiles("#file", big); await fr.waitForFunction(() => /Loaded/.test(document.getElementById("st").textContent));
   await fr.click('[data-tool="mosaic"]');
+  ok(!(await fr.isVisible("#color")) && await fr.isVisible("#strength"), "mosaic shows strength, hides colour");
   ok(await fr.getAttribute('[data-tool="mosaic"]', "aria-pressed") === "true", "selected tool is marked");
   const bx = await (await fr.$("#ov")).boundingBox(); const k = bx.width / 1600; const P = (x, y) => [bx.x + x * k, bx.y + y * k];
   await pg.mouse.move(...P(100, 100)); await pg.mouse.down(); await pg.mouse.move(...P(500, 300), { steps: 5 });
@@ -61,10 +68,26 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   ok((await st(fr)) === "Area too small, cancelled", "tiny drag is ignored");
   await pg.close();
 
+  // 2b. colour picker + mosaic strength change the result
+  [pg, fr] = await open();
+  await fr.setInputFiles("#file", big); await fr.waitForFunction(() => /Loaded/.test(document.getElementById("st").textContent));
+  await fr.click('[data-tool="rect"]'); await fr.fill("#color", "#00ff00");
+  const bx2 = await (await fr.$("#ov")).boundingBox(); const k2 = bx2.width / 1600; const Q = (x, y) => [bx2.x + x * k2, bx2.y + y * k2];
+  await pg.mouse.move(...Q(100, 100)); await pg.mouse.down(); await pg.mouse.move(...Q(300, 300), { steps: 3 }); await pg.mouse.up();
+  ok(await fr.evaluate(() => [...document.getElementById("cv").getContext("2d").getImageData(100, 200, 1, 1).data].slice(0, 3).join()) === "0,255,0", "colour picker sets drawn colour");
+  const blockRun = async (lvl) => { await fr.click("#undo"); await fr.click('[data-tool="mosaic"]'); await fr.fill("#strength", String(lvl));
+    await pg.mouse.move(...Q(0, 0)); await pg.mouse.down(); await pg.mouse.move(...Q(800, 50), { steps: 3 }); await pg.mouse.up();
+    // count colour changes along a row: fewer changes = bigger blocks
+    return fr.evaluate(() => { const d = document.getElementById("cv").getContext("2d").getImageData(0, 10, 800, 1).data; let n = 0; for (let i = 4; i < d.length; i += 4) if (d[i] !== d[i - 4]) n++; return n; }); };
+  const weak = await blockRun(1), strong = await blockRun(5);
+  ok(strong < weak, `higher mosaic strength makes bigger blocks (${weak} -> ${strong} edges)`);
+  await pg.close();
+
   // 3. i18n + theme
   [pg, fr] = await open({ locale: "ko-KR", colorScheme: "dark" });
   const s = () => fr.evaluate(() => [document.documentElement.lang, document.documentElement.dataset.theme, document.querySelector('[data-tool="mosaic"]').textContent].join(" "));
   ok((await s()) === "ko dark 모자이크", "follows system language and dark mode");
+  ok((await fr.textContent("#undo")) === "되돌리기", "undo label (ko)");
   await fr.click("#lang"); await fr.click("#theme");
   ok((await s()) === "en light Mosaic", "toggles switch language and theme");
   await pg.evaluate(() => bridge.sendHostContextChange({ theme: "dark", locale: "ko-KR" })); await pg.waitForTimeout(150);

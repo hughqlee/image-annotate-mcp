@@ -8,6 +8,10 @@ body{font:14px system-ui,sans-serif;margin:8px}
 button,.file{padding:4px 10px;border:1px solid var(--btn-bd);border-radius:6px;background:var(--btn);color:var(--fg);cursor:pointer;font:inherit}
 button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);border-color:var(--accent);font-weight:600}
 .file input{display:none}
+.ctl{display:inline-flex;align-items:center;gap:4px;color:var(--muted)}
+.ctl[hidden]{display:none}
+#color{width:28px;height:24px;padding:0;border:1px solid var(--btn-bd);border-radius:4px;background:none}
+#strength{width:90px;accent-color:var(--accent)}
 #st{color:var(--muted);width:100%;min-height:1.2em}
 #wrap{position:relative;display:inline-block;max-width:100%;margin-top:4px;line-height:0}
 #cv{max-width:100%;border:1px solid var(--canvas-bd);display:block;background:var(--btn)}
@@ -17,6 +21,8 @@ button[aria-pressed="true"]{background:var(--accent);color:var(--accent-fg);bord
 <div id="bar">
 <label class="file"><input type="file" id="file" accept="image/*"><span data-i18n="open"></span></label>
 <button data-tool="highlight" data-i18n="highlight"></button><button data-tool="rect" data-i18n="rect" aria-pressed="true"></button><button data-tool="check" data-i18n="check"></button><button data-tool="mosaic" data-i18n="mosaic"></button>
+<span id="colorBox" class="ctl"><span data-i18n="color"></span><input type="color" id="color" value="#e11d1d"></span>
+<span id="strengthBox" class="ctl" hidden><span data-i18n="strength"></span><input type="range" id="strength" min="1" max="5" step="1" value="3"></span>
 <button id="undo" data-i18n="undo"></button><button id="export" data-i18n="export"></button>
 <span class="sep"></span>
 <button id="lang" title="Language / 언어"></button><button id="theme"></button>

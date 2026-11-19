@@ -7,16 +7,16 @@ let loaded = false, tool = "rect", undo = [], start = null;
 
 // ---------- i18n + theme ----------
 const T = {
-  en: { open: "Open image", highlight: "Highlight", rect: "Box", check: "Check", mosaic: "Mosaic", undo: "Undo", export: "Export",
+  en: { open: "Open image", highlight: "Highlight", rect: "Box", check: "Check", mosaic: "Mosaic", undo: "Undo", export: "Export", color: "Colour", strength: "Strength",
         hint: "Paste (Ctrl+V), drop, or open an image", connected: "Ready", loaded: (w, h) => `Loaded ${w}×${h}`,
         selected: n => `${n}: drag to select an area`, applied: (n, w, h) => `${n} applied ${w}×${h}`, tooSmall: "Area too small, cancelled",
         cancelled: "Drag cancelled", agent: "Applied marks from Claude", agentRestored: "Applied marks from Claude (image restored)",
-        live: "Applied live marks", exported: "Exported", failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
-  ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", undo: "취소", export: "내보내기",
+        live: "Applied live marks", exported: "Exported", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
+  ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", undo: "되돌리기", export: "내보내기", color: "색상", strength: "강도",
         hint: "이미지를 붙여넣기(Ctrl+V), 드래그하거나 열어 주세요", connected: "준비됨", loaded: (w, h) => `불러옴 ${w}×${h}`,
         selected: n => `${n}: 드래그로 영역 지정`, applied: (n, w, h) => `${n} 적용 ${w}×${h}`, tooSmall: "영역이 너무 작아 취소됨",
         cancelled: "드래그 취소", agent: "Claude 표시 적용", agentRestored: "Claude 표시 적용 (이미지 복원)",
-        live: "실시간 표시 적용", exported: "내보냄", failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
+        live: "실시간 표시 적용", exported: "내보냄", resized: (w, h) => `큰 이미지를 ${w}×${h}로 줄임`, failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
 };
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 const sysDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
@@ -48,16 +48,29 @@ app.onhostcontextchanged = applyHost;
 
 // ---------- tools ----------
 const toolBtns = document.querySelectorAll("[data-tool]");
-const toolColor = { highlight: "#e6b800", rect: "#e11", check: "#1a1", mosaic: "#1f6feb" };
-toolBtns.forEach(b => b.onclick = () => { tool = b.dataset.tool; toolBtns.forEach(x => x.setAttribute("aria-pressed", String(x === b))); log("selected", t(tool)); });
+// per-tool colour, remembered for the session; mosaic has no colour, it has strength
+const HEX = /^#[0-9a-f]{6}$/i;
+const toolColor = { highlight: "#ffe600", rect: "#e11d1d", check: "#1aaa1a", mosaic: "#1f6feb" };
+const colorIn = $("color"), strengthIn = $("strength");
+function syncToolControls() {
+  const isMosaic = tool === "mosaic";
+  $("colorBox").hidden = isMosaic; $("strengthBox").hidden = !isMosaic;
+  colorIn.value = toolColor[tool];
+}
+colorIn.oninput = () => { if (HEX.test(colorIn.value)) toolColor[tool] = colorIn.value; };
+toolBtns.forEach(b => b.onclick = () => { tool = b.dataset.tool; toolBtns.forEach(x => x.setAttribute("aria-pressed", String(x === b))); syncToolControls(); log("selected", t(tool)); });
+syncToolControls();
+const rgba = (hex, a) => { const n = parseInt(hex.slice(1), 16); return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
 
 // ---------- image in ----------
 function loadBlob(blob) {
   // blob: URLs are blocked by the default MCP Apps CSP (img-src 'self' data:), so decode directly
   createImageBitmap(blob).then(async (img) => {
-    cv.width = img.width; cv.height = img.height;
-    ctx.drawImage(img, 0, 0); undo = []; loaded = true; save(); clearOverlay(); render();
-    log("loaded", cv.width, cv.height);
+    // cap very large images (memory + canvas limits); 24 MP keeps 4K/5K screenshots at full size
+    const MAX_PX = 24e6, f = Math.min(1, Math.sqrt(MAX_PX / (img.width * img.height)));
+    cv.width = Math.max(1, Math.round(img.width * f)); cv.height = Math.max(1, Math.round(img.height * f));
+    ctx.drawImage(img, 0, 0, cv.width, cv.height); undo = []; loaded = true; save(); clearOverlay(); render();
+    f < 1 ? log("resized", cv.width, cv.height) : log("loaded", cv.width, cv.height);
     const data = cv.toDataURL("image/png").split(",")[1];
     try {
       await app.updateModelContext({ content: [
@@ -67,8 +80,13 @@ function loadBlob(blob) {
   }).catch(e => log("failed", e.message));
 }
 // Test: does a later widget instance of the same server see the earlier image?
-function save() { try { localStorage.setItem("annot:last", cv.toDataURL("image/png")); } catch (e) {} }
+// Privacy: this copy may still be unredacted, so it expires after 30 minutes and is wiped on export.
+const KEEP_MS = 30 * 60 * 1000;
+function save() { try { localStorage.setItem("annot:last", cv.toDataURL("image/png")); localStorage.setItem("annot:lastAt", String(Date.now())); } catch (e) {} }
+function forget() { try { localStorage.removeItem("annot:last"); localStorage.removeItem("annot:lastAt"); } catch (e) {} }
+if (Date.now() - Number(store.get("annot:lastAt") || 0) > KEEP_MS) forget();
 async function restore() {
+  if (Date.now() - Number(store.get("annot:lastAt") || 0) > KEEP_MS) { forget(); return false; }
   const d = store.get("annot:last"); if (!d) return false;
   const bin = atob(d.split(",")[1]); const u = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
   const img = await createImageBitmap(new Blob([u], { type: "image/png" })); cv.width = img.width; cv.height = img.height; ctx.drawImage(img, 0, 0); return true;
@@ -79,16 +97,25 @@ document.addEventListener("dragover", e => e.preventDefault());
 document.addEventListener("drop", e => { e.preventDefault(); const f = e.dataTransfer?.files[0]; if (f) loadBlob(f); });
 
 // ---------- marks ----------
+// mosaic strength 1..5 -> blocks per long side (fewer blocks = bigger blocks = stronger)
+const BLOCKS = [120, 80, 55, 35, 20];
+const UNDO_BYTES = 256 * 1024 * 1024; // keep undo history under ~256 MB
 export function applyMark(m) {
+  if (!["highlight", "rect", "check", "mosaic"].includes(m.type)) return;
+  const nums = [m.x, m.y, m.w, m.h];
+  if (!nums.every(Number.isFinite)) return;
   undo.push(ctx.getImageData(0, 0, cv.width, cv.height));
+  while (undo.length > 1 && undo.length * cv.width * cv.height * 4 > UNDO_BYTES) undo.shift();
   const { x, y, w, h } = m;
-  if (m.type === "rect") { ctx.lineWidth = Math.max(3, cv.width / 300); ctx.strokeStyle = "#e11"; ctx.strokeRect(x, y, w, h); }
-  else if (m.type === "highlight") { ctx.fillStyle = "rgba(255,230,0,0.4)"; ctx.fillRect(x, y, w, h); }
-  else if (m.type === "check") { ctx.lineWidth = Math.max(5, cv.width / 200); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = "#1a1"; ctx.beginPath();
+  const col = HEX.test(m.color || "") ? m.color : toolColor[m.type];
+  if (m.type === "rect") { ctx.lineWidth = Math.max(3, cv.width / 300); ctx.strokeStyle = col; ctx.strokeRect(x, y, w, h); }
+  else if (m.type === "highlight") { ctx.fillStyle = rgba(col, 0.4); ctx.fillRect(x, y, w, h); }
+  else if (m.type === "check") { ctx.lineWidth = Math.max(5, cv.width / 200); ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.strokeStyle = col; ctx.beginPath();
     ctx.moveTo(x, y + h * 0.55); ctx.lineTo(x + w * 0.4, y + h); ctx.lineTo(x + w, y); ctx.stroke(); }
   else if (m.type === "mosaic") {
     // block size scales with the image so text stays unreadable on large screenshots; each block = average colour
-    const s = Math.max(10, Math.round(Math.max(cv.width, cv.height) / 60));
+    const lvl = Math.min(5, Math.max(1, Math.round(m.strength || 3)));
+    const s = Math.max(6, Math.round(Math.max(cv.width, cv.height) / BLOCKS[lvl - 1]));
     const X = Math.max(0, Math.floor(x)), Y = Math.max(0, Math.floor(y)), W = Math.min(cv.width - X, Math.ceil(w)), H = Math.min(cv.height - Y, Math.ceil(h));
     if (W < 1 || H < 1) return;
     const img = ctx.getImageData(X, Y, W, H), d = img.data;
@@ -111,7 +138,7 @@ function drawPreview(a, b, c, d) {
   clearOverlay();
   const k = scale(), x = Math.min(a, c), y = Math.min(b, d), w = Math.abs(c - a), h = Math.abs(d - b), col = toolColor[tool];
   octx.fillStyle = "rgba(0,0,0,0.35)"; octx.fillRect(0, 0, ov.width, ov.height); octx.clearRect(x, y, w, h); // dim outside
-  if (tool === "highlight") { octx.fillStyle = "rgba(255,230,0,0.4)"; octx.fillRect(x, y, w, h); }
+  if (tool === "highlight") { octx.fillStyle = rgba(col, 0.4); octx.fillRect(x, y, w, h); }
   octx.lineWidth = 2 * k; octx.strokeStyle = "#fff"; octx.strokeRect(x, y, w, h);
   octx.setLineDash([6 * k, 4 * k]); octx.strokeStyle = col; octx.strokeRect(x, y, w, h); octx.setLineDash([]);
   const dot = (px, py, r) => { octx.beginPath(); octx.arc(px, py, r * k, 0, 7); octx.fillStyle = "#fff"; octx.fill(); octx.beginPath(); octx.arc(px, py, (r - 2) * k, 0, 7); octx.fillStyle = col; octx.fill(); };
@@ -127,22 +154,23 @@ ov.onpointermove = e => { if (start) drawPreview(...start, ...pt(e)); };
 const endDrag = (e, commit) => { if (!start) return; const [a, b] = start, [c, d] = commit ? pt(e) : start; start = null; clearOverlay();
   const w = Math.abs(c - a), h = Math.abs(d - b);
   if (!commit) return; if (w < 3 || h < 3) return log("tooSmall");
-  applyMark({ type: tool, x: Math.min(a, c), y: Math.min(b, d), w, h }); log("applied", t(tool), Math.round(w), Math.round(h)); };
+  applyMark({ type: tool, x: Math.min(a, c), y: Math.min(b, d), w, h, color: toolColor[tool], strength: +strengthIn.value }); log("applied", t(tool), Math.round(w), Math.round(h)); };
 ov.onpointerup = e => endDrag(e, true);
 ov.onpointercancel = e => endDrag(e, false);
 document.addEventListener("keydown", e => { if (e.key === "Escape" && start) { endDrag(e, false); log("cancelled"); } });
 
 // ---------- agent ----------
-const MarkZ = z.object({ type: z.enum(["highlight", "rect", "check", "mosaic"]), x: z.number(), y: z.number(), w: z.number(), h: z.number() });
-app.registerTool("apply_marks_live", { description: "Draw marks on the image currently open in this annotator window (pixel coords).", inputSchema: z.object({ marks: z.array(MarkZ) }) },
+const MarkZ = z.object({ type: z.enum(["highlight", "rect", "check", "mosaic"]), x: z.number().finite(), y: z.number().finite(), w: z.number().finite().min(0), h: z.number().finite().min(0),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(), strength: z.number().int().min(1).max(5).optional() });
+app.registerTool("apply_marks_live", { description: "Draw marks on the image currently open in this annotator window (pixel coords).", inputSchema: z.object({ marks: z.array(MarkZ).max(200) }) },
   async ({ marks }) => { marks.forEach(applyMark); log("live"); return { content: [{ type: "text", text: `applied ${marks.length}` }] }; });
 let restored = null;
 app.ontoolresult = async p => { const marks = p.structuredContent?.marks || []; if (!marks.length) return;
   if (!loaded && restored === null) { restored = await restore(); loaded = restored; render(); }
-  for (const m of marks) applyMark(m); log(restored ? "agentRestored" : "agent"); };
+  for (const m of marks.slice(0, 200)) applyMark(m); log(restored ? "agentRestored" : "agent"); };
 $("export").onclick = async () => {
   const blob = cv.toDataURL("image/png").split(",")[1];
-  try { await app.downloadFile({ contents: [{ type: "resource", resource: { uri: "file:///annotated.png", mimeType: "image/png", blob } }] }); log("exported"); }
+  try { await app.downloadFile({ contents: [{ type: "resource", resource: { uri: "file:///annotated.png", mimeType: "image/png", blob } }] }); forget(); log("exported"); }
   catch (e) { log("failed", e.message); }
 };
 render();
