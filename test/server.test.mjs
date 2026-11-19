@@ -14,3 +14,21 @@ console.log(isErr(bad) ? "PASS" : "FAIL", "rejects more than 200 marks");
 console.log(isErr(bad2) ? "PASS" : "FAIL", "rejects invalid colour");
 console.log(big.status === 413 ? "PASS" : "FAIL", "rejects body over 256 KiB (status " + big.status + ")");
 if (!isErr(bad) || !isErr(bad2) || big.status !== 413) process.exit(1);
+
+// Directory listing requirements: every tool has a title and explicit readOnly/destructive/openWorld hints;
+// the server reports its name, title and icons; the public pages exist.
+{
+  const raw = async (body) => (await handler.fetch(new Request("http://localhost/mcp", { method: "POST", headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2025-06-18" }, body: JSON.stringify(body) }))).text();
+  const json = s => JSON.parse(s.split("\n").find(l => l.startsWith("data: ")).slice(6));
+  const init = json(await raw({ jsonrpc: "2.0", id: 90, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "t", version: "1" } } })).result.serverInfo;
+  const tools = json(await raw({ jsonrpc: "2.0", id: 91, method: "tools/list", params: {} })).result.tools;
+  const fs = await import("node:fs");
+  const checks = [
+    [init.title && init.version && init.icons?.length && init.websiteUrl, "serverInfo has title, version, websiteUrl, icons: " + init.name],
+    [tools.every(t => t.title && t.annotations && ["readOnlyHint", "destructiveHint", "openWorldHint"].every(k => typeof t.annotations[k] === "boolean")), "every tool has a title and explicit hints"],
+    [["index.html", "privacy.html", "terms.html", "icon.png", "icon.svg", "screenshot.png"].every(f => fs.existsSync("public/" + f)), "public guide, privacy, terms, icon, screenshot built"],
+    [JSON.parse(fs.readFileSync("server.json", "utf8")).version === init.version, "server.json version matches the server"],
+  ];
+  for (const [c, m] of checks) console.log(c ? "PASS" : "FAIL", m);
+  if (!checks.every(([c]) => c)) process.exit(1);
+}

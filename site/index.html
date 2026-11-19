@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Image Annotate · 이미지 주석</title><link rel="icon" href="/icon.svg" type="image/svg+xml"><link rel="icon" href="/icon.png" type="image/png">
+<style>:root{--bg:#fff;--fg:#1f2328;--muted:#59636e;--bd:#d1d9e0;--well:#f6f8fa;--accent:#1f6feb;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#0d1117;--fg:#e6edf3;--muted:#9198a1;--bd:#3d444d;--well:#161b22;--accent:#4493f8;color-scheme:dark}}
+*{box-sizing:border-box}html,body{background:var(--bg);color:var(--fg)}
+body{font:16px/1.6 system-ui,-apple-system,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic",sans-serif;margin:0 auto;max-width:760px;padding:24px 16px 64px}
+a{color:var(--accent)}header{display:flex;gap:14px;align-items:center;margin-bottom:8px}header img{width:56px;height:56px;border-radius:12px}
+h1{font-size:1.6rem;margin:0}h2{font-size:1.25rem;margin:2rem 0 .5rem;padding-top:.5rem;border-top:1px solid var(--bd)}h3{font-size:1.05rem;margin:1.2rem 0 .3rem}
+nav{font-size:.95rem;color:var(--muted);margin:4px 0 16px}nav a{margin-right:12px}
+code{font:.9em ui-monospace,SFMono-Regular,Menlo,monospace;background:var(--well);border:1px solid var(--bd);border-radius:4px;padding:1px 5px;word-break:break-all}
+.lead{color:var(--muted);margin:0}.muted{color:var(--muted);font-size:.9rem}ol,ul{padding-left:1.4em}li{margin:.2em 0}
+table{border-collapse:collapse;width:100%;font-size:.95rem}td,th{border:1px solid var(--bd);padding:6px 8px;text-align:left;vertical-align:top}
+q{quotes:"“" "”"}section[lang=ko] q{quotes:"‘" "’"}figure{margin:16px 0}figure img{max-width:100%;border:1px solid var(--bd);border-radius:8px}</style></head><body>
+<header><img src="/icon.png" alt=""><div><h1>Image Annotate <span class="muted">· 이미지 주석</span></h1><p class="lead">Highlight, box, check, mosaic or redact parts of a screenshot, by hand or by asking the agent.</p></div></header>
+<nav><a href="/">Guide</a><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://github.com/hughqlee/image-annotate-mcp/issues">Support</a><a href="https://github.com/hughqlee/image-annotate-mcp">Source</a></nav>
+<figure><img src="/screenshot.png" alt="Image Annotate"></figure><p class="muted"><a href="#en">English</a> · <a href="#ko">한국어</a></p><section id="en" lang="en"><h2>Install</h2>
+<h3>Claude (web, desktop, mobile)</h3>
+<ol><li>Open Settings → Connectors → <b>Add custom connector</b>.</li><li>Name it <b>Image Annotate</b> and enter <code>https://image-annotate-mcp.vercel.app/mcp</code>. No sign-in is needed.</li><li>In a chat, turn it on under <b>+</b> → Connectors.</li></ol>
+<p class="muted">On Team and Enterprise plans an organisation owner may need to add the connector first.</p>
+<h3>ChatGPT</h3>
+<ol><li>Settings → Apps → Advanced settings: turn on <b>Developer mode</b>.</li><li><b>Create app</b>: MCP server URL <code>https://image-annotate-mcp.vercel.app/mcp</code>, authentication <b>None</b>.</li></ol>
+<h3>Claude Code · Codex · other MCP clients</h3>
+<p>Add the remote MCP server (Streamable HTTP) at <code>https://image-annotate-mcp.vercel.app/mcp</code>, for example <code>claude mcp add --transport http image-annotate https://image-annotate-mcp.vercel.app/mcp</code>. The interactive UI shows only in hosts that support MCP Apps.</p>
+<h2>How to use</h2><ol><li>Ask: <q>Open the image annotator.</q></li><li>Paste a screenshot (Ctrl+V / ⌘V), drop it, or pick a file inside the app.</li><li>Choose a tool (highlight, box, check, mosaic, redact), colour or mosaic strength, and drag over the area. The dimmed preview shows what will be marked.</li><li>Or ask the agent: <q>Mosaic the email address</q>, <q>Box the error message in red</q>.</li><li>Export saves a PNG. Undo reverts the last mark.</li></ol>
+<h2>Tools</h2><table><tr><th>Tool</th><th>What it does</th></tr><tr><td><code>open_annotator</code></td><td>Opens the annotator.</td></tr><tr><td><code>apply_marks</code></td><td>Draws marks the agent chose (pixel rectangles) on the image you loaded.</td></tr></table>
+<h2>Good to know</h2><ul><li>For passwords, card numbers and IDs use <b>redact</b> (solid box). Mosaic can sometimes be partly reversed.</li><li>Images larger than 24 megapixels are scaled down.</li></ul>
+<h2>Your data</h2><ul><li><b>The image.</b> Stays in your browser, inside the app. It is never uploaded to our server. To let the agent mark it for you, the app shares the image with the AI model of the chat app you use (for example Claude or ChatGPT) through that app's model context. That copy is handled by the chat app's provider under its own privacy policy, as with any image you attach to a chat.</li><li><b>Agent marks.</b> When the agent marks the image, the chat app sends us only the mark positions, types and colours (numbers, no image). We use them to answer the call and do not keep them.</li><li><b>Data stored on your device.</b> Your language and theme choice, and a copy of the last image so the app can reopen it. That copy expires after 30 minutes and is deleted when you export. It is kept in your browser's local storage and never leaves your device.</li></ul>
+<p>Details: <a href="/privacy">Privacy policy</a>.</p>
+<h2>Support</h2><p>Report bugs or ask questions on <a href="https://github.com/hughqlee/image-annotate-mcp/issues">GitHub Issues</a>. The app is free and needs no account.</p></section><section id="ko" lang="ko"><h2 style="border-top:2px solid var(--bd)">한국어</h2><p class="lead">스크린샷에 하이라이트, 네모, 체크, 모자이크, 가리기를 손으로 또는 에이전트에게 말해서 표시합니다.</p><h2>설치</h2>
+<h3>Claude (웹, 데스크톱, 모바일)</h3>
+<ol><li>설정 → 커넥터 → <b>사용자 지정 커넥터 추가</b>를 엽니다.</li><li>이름은 <b>이미지 주석</b>, URL은 <code>https://image-annotate-mcp.vercel.app/mcp</code>를 넣습니다. 로그인은 필요 없습니다.</li><li>대화에서 <b>+</b> → 커넥터에서 켜고 사용합니다.</li></ol>
+<p class="muted">Team, Enterprise 플랜은 조직 소유자가 먼저 커넥터를 추가해야 할 수 있습니다.</p>
+<h3>ChatGPT</h3>
+<ol><li>설정 → 앱 → 고급 설정에서 <b>개발자 모드</b>를 켭니다.</li><li><b>앱 만들기</b>에서 MCP 서버 URL에 <code>https://image-annotate-mcp.vercel.app/mcp</code>, 인증은 <b>없음</b>을 고릅니다.</li></ol>
+<h3>Claude Code · Codex · 기타 MCP 클라이언트</h3>
+<p>원격 MCP 서버(Streamable HTTP) 주소 <code>https://image-annotate-mcp.vercel.app/mcp</code>를 추가합니다. 예: <code>claude mcp add --transport http image-annotate https://image-annotate-mcp.vercel.app/mcp</code>. 화면(UI)은 MCP Apps를 지원하는 앱에서만 보입니다.</p>
+<h2>사용법</h2><ol><li><q>이미지 주석 앱 열어 줘</q>라고 요청합니다.</li><li>앱 안에서 스크린샷을 붙여넣거나(Ctrl+V / ⌘V), 끌어다 놓거나, 파일을 고릅니다.</li><li>도구(하이라이트, 네모, 체크, 모자이크, 가리기)와 색상 또는 모자이크 강도를 고르고 영역을 드래그합니다. 드래그하는 동안 표시될 영역이 미리 보입니다.</li><li>또는 에이전트에게 <q>이메일 주소 모자이크해 줘</q>, <q>오류 메시지에 빨간 네모 쳐 줘</q>라고 말합니다.</li><li>내보내기를 누르면 PNG로 저장됩니다. 되돌리기는 마지막 표시를 취소합니다.</li></ol>
+<h2>도구</h2><table><tr><th>도구</th><th>하는 일</th></tr><tr><td><code>open_annotator</code></td><td>주석 앱을 엽니다.</td></tr><tr><td><code>apply_marks</code></td><td>에이전트가 정한 위치(픽셀 사각형)에 표시를 그립니다.</td></tr></table>
+<h2>알아 둘 점</h2><ul><li>비밀번호, 카드 번호, 신분증 번호는 <b>가리기</b>(불투명 상자)를 쓰세요. 모자이크는 일부 복원될 수 있습니다.</li><li>2,400만 화소를 넘는 이미지는 축소됩니다.</li></ul>
+<h2>데이터</h2><ul><li><b>이미지.</b> 브라우저의 앱 안에만 있습니다. 저희 서버로는 절대 올라가지 않습니다. 에이전트가 대신 표시할 수 있도록, 앱은 이미지를 사용 중인 채팅 앱(예: Claude, ChatGPT)의 AI 모델에 그 앱의 모델 컨텍스트로 공유합니다. 이 사본은 채팅에 이미지를 첨부할 때와 같이 해당 채팅 앱 제공자의 개인정보처리방침에 따라 처리됩니다.</li><li><b>에이전트 표시.</b> 에이전트가 표시할 때 채팅 앱이 저희 서버로 보내는 것은 표시의 위치, 종류, 색상(숫자)뿐이고 이미지는 없습니다. 응답에만 쓰고 보관하지 않습니다.</li><li><b>기기에 저장되는 데이터.</b> 언어와 테마 선택, 그리고 앱을 다시 열 때 복원하기 위한 마지막 이미지 사본입니다. 이 사본은 30분 뒤 만료되고 내보내기를 하면 삭제됩니다. 브라우저의 로컬 저장소에만 있고 기기 밖으로 나가지 않습니다.</li></ul>
+<p>자세한 내용은 <a href="/privacy#ko">개인정보처리방침</a>을 보세요.</p>
+<h2>문의</h2><p>버그나 질문은 <a href="https://github.com/hughqlee/image-annotate-mcp/issues">GitHub Issues</a>에 남겨 주세요. 무료이고, 계정이나 로그인이 필요 없습니다.</p></section>
+</body></html>
