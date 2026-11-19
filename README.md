@@ -50,7 +50,7 @@ npm test          # builds the UI, checks the MCP server, runs the browser test 
 ## Directory listing
 
 - Public pages (guide, privacy, terms, icon) live in `site/` and are copied to `public/` by `npm run build`.
-- Listing screenshots: `node test/listing-shots.cjs` writes `docs/listing/*.png` (PNG, 2000px wide, app area only).
+- Listing screenshots: `node test/listing-shots.cjs` writes `docs/listing/*.png` (PNG, 2000px wide, app area only) and `site/sample.png`, the made-up checkout screen reviewers paste into the app.
 - MCP Registry: `server.json` (`io.github.hughqlee/…`). `.github/workflows/publish-mcp.yml` publishes it (Actions → Run workflow, or push a `v*` tag).
   Keep the version in `server.json`, `package.json` and `lib/server.js` in step; the server test checks it.
 - ChatGPT domain check: set the `OPENAI_APPS_CHALLENGE` environment variable in Vercel to the token from the OpenAI portal and redeploy;

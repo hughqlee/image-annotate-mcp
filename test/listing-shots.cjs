@@ -26,7 +26,7 @@ const SAMPLE = `<html><body style="margin:0;width:1200px;height:530px;font:22px 
   const srv = http.createServer((q, r) => { const f = path.join(out, q.url.split("?")[0]); fs.existsSync(f) ? r.end(fs.readFileSync(f)) : (r.statusCode = 404, r.end()); }).listen(0);
   const b = await chromium.launch();
   let R; // element rects in image pixels
-  { const p = await b.newPage({ viewport: { width: 1200, height: 530 } }); await p.setContent(SAMPLE); await p.screenshot({ path: path.join(out, "sample.png") });
+  { const p = await b.newPage({ viewport: { width: 1200, height: 530 } }); await p.setContent(SAMPLE); await p.screenshot({ path: path.join(out, "sample.png") }); fs.copyFileSync(path.join(out, "sample.png"), path.join(__dirname, "../site/sample.png")); // reviewers paste this one
     R = await p.evaluate(() => Object.fromEntries(["err", "email", "card", "total", "pay"].map(id => { const r = document.getElementById(id).getBoundingClientRect(); return [id, { x: r.x, y: r.y, w: r.width, h: r.height }]; }))); await p.close(); }
   const pad = (r, p = 8) => ({ x: r.x - p, y: r.y - p, w: r.w + 2 * p, h: r.h + 2 * p });
   const W = 1000, H = 520;
