@@ -29,6 +29,7 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   const img = path.join(out, "t.png"); fs.writeFileSync(img, await png(pg, 300, 150));
   await fr.setInputFiles("#file", img); await fr.waitForFunction(() => /Loaded/.test(document.getElementById("st").textContent));
   ok((await st(fr)) === "Loaded 300×150", "file input loads image");
+  ok(!(await fr.isVisible("#hint")), "paste hint is hidden once an image is loaded");
   await fr.evaluate(b64 => { const u = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); const dt = new DataTransfer(); dt.items.add(new File([u], "p.png", { type: "image/png" }));
     document.dispatchEvent(new ClipboardEvent("paste", { clipboardData: dt })); }, fs.readFileSync(img).toString("base64"));
   await fr.evaluate(b64 => { const u = Uint8Array.from(atob(b64), c => c.charCodeAt(0)); const dt = new DataTransfer(); dt.items.add(new File([u], "d.png", { type: "image/png" }));

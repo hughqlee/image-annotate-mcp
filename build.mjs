@@ -6,5 +6,12 @@ const html = fs.readFileSync("src/ui.html", "utf8").replace("/*BUNDLE*/", () => 
 fs.mkdirSync("lib", { recursive: true });
 fs.writeFileSync("lib/ui-html.js", "export default " + JSON.stringify(html) + ";\n");
 fs.mkdirSync("public", { recursive: true });
-fs.writeFileSync("public/index.html", "<!doctype html><meta charset=utf-8><title>annotate-test</title><p>MCP endpoint: <code>/mcp</code></p>");
+// Public pages (guide, privacy, terms, icon) for the directory listings: site/ -> public/.
+fs.cpSync("site", "public", { recursive: true });
+fs.copyFileSync("docs/listing/1.png", "public/screenshot.png");
+// ChatGPT app review checks domain ownership at this path; the token comes from the OpenAI portal.
+if (process.env.OPENAI_APPS_CHALLENGE) {
+  fs.mkdirSync("public/.well-known", { recursive: true });
+  fs.writeFileSync("public/.well-known/openai-apps-challenge", process.env.OPENAI_APPS_CHALLENGE.trim());
+}
 console.log("ui html bytes", html.length);

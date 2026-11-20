@@ -1,1 +1,1 @@
-{ "buildCommand": "npm run build", "outputDirectory": "public", "rewrites": [{ "source": "/mcp", "destination": "/api/mcp" }] }
+{ "buildCommand": "npm run build", "outputDirectory": "public", "cleanUrls": true, "rewrites": [{ "source": "/mcp", "destination": "/api/mcp" }] }
