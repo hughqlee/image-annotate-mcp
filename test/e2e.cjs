@@ -13,10 +13,10 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   const srv = http.createServer((q, r) => { const p = path.join(out, q.url.split("?")[0]); fs.existsSync(p) ? r.end(fs.readFileSync(p)) : (r.statusCode = 404, r.end()); }).listen(0);
   const base = `http://localhost:${srv.address().port}/host.html`;
   const b = await chromium.launch();
-  const open = async (opts = {}) => {
+  const open = async (opts = {}, caps) => {
     const pg = await b.newPage({ viewport: { width: 1000, height: 700 }, locale: "en-US", colorScheme: "light", ...opts });
     pg.on("pageerror", e => ok(false, "page error: " + e.message));
-    await pg.goto(base); await pg.evaluate(h => startHost(h), ui);
+    await pg.goto(base); await pg.evaluate(([h, c]) => startHost(h, c), [ui, caps]);
     const fr = pg.frames()[1]; await fr.waitForFunction(() => /Ready|준비됨/.test(document.getElementById("st").textContent));
     return [pg, fr];
   };
@@ -56,6 +56,17 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   ok(dl.length === 1 && dl[0].mime === "image/png", "export sends PNG via ui/download-file");
   await pg.close();
 
+  // 1b. host without ui/download-file (Claude today): export falls back to the result panel
+  [pg, fr] = await open({}, { updateModelContext: { text: {}, image: {} }, message: { text: {}, image: {} } });
+  await fr.setInputFiles("#file", img); await fr.waitForFunction(() => /Loaded/.test(document.getElementById("st").textContent));
+  await fr.click("#export"); await pg.waitForTimeout(150);
+  ok(await fr.isVisible("#out") && (await fr.getAttribute("#outImg", "src")).startsWith("data:image/png;base64,"), "no download support: result panel shows the image");
+  ok(await fr.isVisible("#send"), "send-to-chat offered when the host accepts messages");
+  await fr.click("#send"); await pg.waitForTimeout(150);
+  const msg = await pg.evaluate(() => __log.filter(e => e.ev === "message"));
+  ok(msg.length === 1 && msg[0].types.join() === "image,text", "send-to-chat posts the image");
+  await pg.close();
+
   // 2. drag with preview
   [pg, fr] = await open();
   const big = path.join(out, "big.png"); fs.writeFileSync(big, await png(pg, 1600, 900));
@@ -71,6 +82,23 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   { const m = (await st(fr)).match(/^Mosaic applied (\d+)×(\d+)$/); ok(m && Math.abs(m[1] - 400) <= 2 && Math.abs(m[2] - 200) <= 2, "drag applies mark with size: " + (await st(fr))); }
   await pg.mouse.move(...P(10, 10)); await pg.mouse.down(); await pg.mouse.up();
   ok((await st(fr)) === "Area too small, cancelled", "tiny drag is ignored");
+  await pg.close();
+
+  // 2a. zoom: view scales, image pixels and drawing coordinates stay correct
+  [pg, fr] = await open();
+  await fr.setInputFiles("#file", big); await fr.waitForFunction(() => /Loaded/.test(document.getElementById("st").textContent));
+  const w0 = await fr.evaluate(() => document.getElementById("cv").getBoundingClientRect().width);
+  await fr.click("#zoomIn"); await fr.click("#zoomIn");
+  const z = await fr.evaluate(() => ({ w: document.getElementById("cv").getBoundingClientRect().width, iw: document.getElementById("cv").width, pct: document.getElementById("zoomPct").textContent, scroll: document.getElementById("view").scrollWidth > document.getElementById("view").clientWidth }));
+  ok(z.w > w0 * 1.5 && z.iw === 1600 && z.scroll, `zoom in enlarges the view only (${Math.round(w0)}px -> ${Math.round(z.w)}px, ${z.pct})`);
+  // drawing while zoomed still maps to image pixels
+  await fr.click('[data-tool="redact"]');
+  const vb = await (await fr.$("#view")).boundingBox();
+  await pg.mouse.move(vb.x + 20, vb.y + 20); await pg.mouse.down(); await pg.mouse.move(vb.x + 120, vb.y + 80, { steps: 3 }); await pg.mouse.up();
+  const sz = (await st(fr)).match(/(\d+)×(\d+)/); const sc = z.w / 1600;
+  ok(sz && Math.abs(sz[1] - 100 / sc) < 4 && Math.abs(sz[2] - 60 / sc) < 4, `drag while zoomed uses image coordinates (${await st(fr)})`);
+  await fr.click("#zoomFit");
+  ok(Math.abs(await fr.evaluate(() => document.getElementById("cv").getBoundingClientRect().width) - w0) < 2, "fit restores the original view");
   await pg.close();
 
   // 2b. colour picker + mosaic strength change the result

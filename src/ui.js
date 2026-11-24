@@ -7,16 +7,22 @@ let loaded = false, tool = "rect", undo = [], start = null;
 
 // ---------- i18n + theme ----------
 const T = {
-  en: { open: "Open image", highlight: "Highlight", rect: "Box", check: "Check", mosaic: "Mosaic", redact: "Redact", undo: "Undo", export: "Export", color: "Colour", strength: "Strength",
+  en: { open: "Open image", highlight: "Highlight", rect: "Box", check: "Check", mosaic: "Mosaic", redact: "Redact", undo: "Undo", export: "Export", fit: "Fit", color: "Colour", strength: "Strength",
         hint: "Paste (Ctrl+V), drop, or open an image", connected: "Ready", loaded: (w, h) => `Loaded ${w}×${h}`,
         selected: n => `${n}: drag to select an area`, applied: (n, w, h) => `${n} applied ${w}×${h}`, tooSmall: "Area too small, cancelled",
         cancelled: "Drag cancelled", agent: "Applied marks from Claude", agentRestored: "Applied marks from Claude (image restored)",
-        live: "Applied live marks", exported: "Exported", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
-  ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", redact: "가리기", undo: "되돌리기", export: "내보내기", color: "색상", strength: "강도",
+        live: "Applied live marks", exported: "Exported",
+        useBelow: "Save from the panel below", outTitle: "Your image", outHint: "Right-click (or long-press) the image to save or copy it.", outWhy: r => `Direct download unavailable (${r}).`,
+        denied: "cancelled or blocked", noDownload: "not supported here", copy: "Copy image", send: "Send to chat", close: "Close",
+        copied: "Copied to clipboard", copyFailed: "Copy blocked: right-click the image instead", sent: "Sent to chat", sentText: "Annotated image", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
+  ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", redact: "가리기", undo: "되돌리기", export: "내보내기", fit: "맞춤", color: "색상", strength: "강도",
         hint: "이미지를 붙여넣기(Ctrl+V), 드래그하거나 열어 주세요", connected: "준비됨", loaded: (w, h) => `불러옴 ${w}×${h}`,
         selected: n => `${n}: 드래그로 영역 지정`, applied: (n, w, h) => `${n} 적용 ${w}×${h}`, tooSmall: "영역이 너무 작아 취소됨",
         cancelled: "드래그 취소", agent: "Claude 표시 적용", agentRestored: "Claude 표시 적용 (이미지 복원)",
-        live: "실시간 표시 적용", exported: "내보냄", resized: (w, h) => `큰 이미지를 ${w}×${h}로 줄임`, failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
+        live: "실시간 표시 적용", exported: "내보냄",
+        useBelow: "아래 창에서 저장하세요", outTitle: "완성된 이미지", outHint: "이미지를 우클릭(모바일은 길게 누르기)해서 저장하거나 복사하세요.", outWhy: r => `바로 다운로드할 수 없습니다 (${r}).`,
+        denied: "취소되었거나 차단됨", noDownload: "이 앱에서 지원 안 함", copy: "이미지 복사", send: "채팅으로 보내기", close: "닫기",
+        copied: "클립보드에 복사됨", copyFailed: "복사가 막혔습니다. 이미지를 우클릭하세요", sent: "채팅으로 보냄", sentText: "주석 단 이미지", resized: (w, h) => `큰 이미지를 ${w}×${h}로 줄임`, failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
 };
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 const sysDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
@@ -69,7 +75,7 @@ function loadBlob(blob) {
     // cap very large images (memory + canvas limits); 24 MP keeps 4K/5K screenshots at full size
     const MAX_PX = 24e6, f = Math.min(1, Math.sqrt(MAX_PX / (img.width * img.height)));
     cv.width = Math.max(1, Math.round(img.width * f)); cv.height = Math.max(1, Math.round(img.height * f));
-    ctx.drawImage(img, 0, 0, cv.width, cv.height); undo = []; loaded = true; save(); clearOverlay(); render();
+    ctx.drawImage(img, 0, 0, cv.width, cv.height); setZoom(null); undo = []; loaded = true; save(); clearOverlay(); render();
     f < 1 ? log("resized", cv.width, cv.height) : log("loaded", cv.width, cv.height);
     const data = cv.toDataURL("image/png").split(",")[1];
     try {
@@ -170,11 +176,71 @@ let restored = null;
 app.ontoolresult = async p => { const marks = p.structuredContent?.marks || []; if (!marks.length) return;
   if (!loaded && restored === null) { restored = await restore(); loaded = restored; render(); }
   for (const m of marks.slice(0, 200)) applyMark(m); log(restored ? "agentRestored" : "agent"); };
+// ---------- zoom (view only; never changes the image) ----------
+// zoom = null means "fit to width"; otherwise screen px per image px
+let zoom = null;
+const view = $("view");
+const shownScale = () => cv.getBoundingClientRect().width / cv.width;
+function setZoom(z, anchor) {
+  const before = shownScale();
+  const rect = view.getBoundingClientRect();
+  // image point under the anchor (default: view centre), so it stays put after zooming
+  const ax = anchor ? anchor[0] - rect.left : view.clientWidth / 2, ay = anchor ? anchor[1] - rect.top : view.clientHeight / 2;
+  const ix = (view.scrollLeft + ax) / before, iy = (view.scrollTop + ay) / before;
+  zoom = z === null ? null : Math.min(8, Math.max(0.1, z));
+  view.classList.toggle("zoomed", zoom !== null);
+  cv.style.width = zoom === null ? "" : `${Math.round(cv.width * zoom)}px`;
+  const after = shownScale();
+  if (zoom !== null) { view.scrollLeft = ix * after - ax; view.scrollTop = iy * after - ay; }
+  $("zoomPct").textContent = `${Math.round(after * 100)}%`;
+}
+const step = dir => setZoom(shownScale() * (dir > 0 ? 1.25 : 0.8));
+$("zoomIn").onclick = () => step(1);
+$("zoomOut").onclick = () => step(-1);
+$("zoomFit").onclick = () => setZoom(null);
+view.addEventListener("wheel", e => { if (!(e.ctrlKey || e.metaKey)) return; e.preventDefault(); setZoom(shownScale() * (e.deltaY < 0 ? 1.1 : 1 / 1.1), [e.clientX, e.clientY]); }, { passive: false });
+document.addEventListener("keydown", e => { if (e.target.tagName === "INPUT") return;
+  if (e.key === "+" || e.key === "=") step(1); else if (e.key === "-") step(-1); else if (e.key === "0") setZoom(null); });
+new ResizeObserver(() => { $("zoomPct").textContent = `${Math.round(shownScale() * 100)}%`; }).observe(cv);
+
+// ---------- export ----------
+// 1) host download (ui/download-file) when the host supports it and it succeeds;
+// 2) otherwise a result panel: the image itself (right-click / long-press to save or copy),
+//    a copy button, and "send to chat" so the image lands in the conversation.
+const caps = () => app.getHostCapabilities() || {};
+const pngB64 = () => cv.toDataURL("image/png").split(",")[1];
+function showOut(reason) {
+  $("outImg").src = cv.toDataURL("image/png");
+  $("outWhy").textContent = reason ? t("outWhy", reason) : "";
+  $("send").hidden = !caps().message;
+  $("out").hidden = false; $("out").scrollIntoView({ block: "nearest" });
+}
 $("export").onclick = async () => {
-  const blob = cv.toDataURL("image/png").split(",")[1];
-  try { await app.downloadFile({ contents: [{ type: "resource", resource: { uri: "file:///annotated.png", mimeType: "image/png", blob } }] }); forget(); log("exported"); }
-  catch (e) { log("failed", e.message); }
+  if (!loaded) return;
+  if (caps().downloadFile) {
+    try {
+      const r = await app.downloadFile({ contents: [{ type: "resource", resource: { uri: "file:///annotated.png", mimeType: "image/png", blob: pngB64() } }] });
+      if (!r?.isError) { forget(); log("exported"); return; }
+      showOut(t("denied"));
+    } catch (e) { showOut(e.message); }
+  } else showOut(t("noDownload"));
+  log("useBelow");
 };
+$("copy").onclick = async () => {
+  try {
+    const blob = await new Promise(res => cv.toBlob(res, "image/png"));
+    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+    forget(); log("copied");
+  } catch (e) { log("copyFailed"); }
+};
+$("send").onclick = async () => {
+  try {
+    const r = await app.sendMessage({ role: "user", content: [{ type: "image", data: pngB64(), mimeType: "image/png" }, { type: "text", text: t("sentText") }] });
+    if (r?.isError) throw new Error("rejected");
+    forget(); log("sent");
+  } catch (e) { log("failed", e.message); }
+};
+$("closeOut").onclick = () => { $("out").hidden = true; };
 render();
 await app.connect();
 applyHost(app.getHostContext());
