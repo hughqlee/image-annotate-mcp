@@ -81,6 +81,18 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   ok(/Copy blocked/.test(await st(fr)) && await fr.isVisible("#out"), "copy blocked: panel offers right-click save (" + await st(fr) + ")");
   await pg.close();
 
+  // 1d. model context stays under Claude's cap even for a large, noisy screenshot
+  [pg, fr] = await open();
+  const noisy = path.join(out, "noisy.png");
+  fs.writeFileSync(noisy, Buffer.from(await pg.evaluate(() => { const c = document.createElement("canvas"); c.width = 2560; c.height = 1600; const x = c.getContext("2d");
+    const d = x.createImageData(c.width, c.height); for (let i = 0; i < d.data.length; i++) d.data[i] = (i % 4 === 3) ? 255 : (Math.random() * 256) | 0; x.putImageData(d, 0, 0);
+    return c.toDataURL().split(",")[1]; }), "base64"));
+  await fr.setInputFiles("#file", noisy); await fr.waitForFunction(() => /Loaded/.test(document.getElementById("st").textContent));
+  await pg.waitForTimeout(200);
+  const big1 = (await pg.evaluate(() => __log.filter(e => e.ev === "ctx"))).at(-1);
+  ok(big1 && big1.types.join() === "image,text" && big1.bytes > 0 && big1.bytes <= 36000, `model-context image is capped (${big1 && big1.bytes} base64 chars for 2560x1600 noise)`);
+  await pg.close();
+
   // 2. drag with preview
   [pg, fr] = await open();
   const big = path.join(out, "big.png"); fs.writeFileSync(big, await png(pg, 1600, 900));

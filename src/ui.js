@@ -12,7 +12,7 @@ const T = {
         selected: n => `${n}: drag to select an area`, applied: (n, w, h) => `${n} applied ${w}×${h}`, tooSmall: "Area too small, cancelled",
         cancelled: "Drag cancelled", agent: "Applied marks from Claude", agentRestored: "Applied marks from Claude (image restored)",
         live: "Applied live marks", exported: "Exported",
-        useBelow: "Save from the panel below", outTitle: "Your image", outHint: "Right-click (or long-press) the image to save or copy it.", outWhy: r => `Direct download unavailable (${r}).`,
+        useBelow: "Save from the panel below", outTitle: "Your image", outHint: "Use Copy image above. Some apps also let you right-click (or long-press) the image to save it.", outWhy: r => `Direct download unavailable (${r}).`,
         denied: "cancelled or blocked", noDownload: "not supported here", copy: "Copy image", send: "Send to chat", close: "Close",
         copied: "Image copied. Paste it anywhere (Ctrl+V / ⌘V)", copyFailed: "Copy blocked here. Right-click the image below to save it", sent: "Sent to chat", sentText: "Here is my annotated image from the annotator. Please take a look.", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
   ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", redact: "가리기", undo: "되돌리기", export: "이미지 저장", exportCopy: "이미지 복사", fit: "맞춤", color: "색상", strength: "강도",
@@ -20,7 +20,7 @@ const T = {
         selected: n => `${n}: 드래그로 영역 지정`, applied: (n, w, h) => `${n} 적용 ${w}×${h}`, tooSmall: "영역이 너무 작아 취소됨",
         cancelled: "드래그 취소", agent: "Claude 표시 적용", agentRestored: "Claude 표시 적용 (이미지 복원)",
         live: "실시간 표시 적용", exported: "내보냄",
-        useBelow: "아래 창에서 저장하세요", outTitle: "완성된 이미지", outHint: "이미지를 우클릭(모바일은 길게 누르기)해서 저장하거나 복사하세요.", outWhy: r => `바로 다운로드할 수 없습니다 (${r}).`,
+        useBelow: "아래 창에서 저장하세요", outTitle: "완성된 이미지", outHint: "위의 '이미지 복사'를 누르세요. 앱에 따라 이미지를 우클릭(모바일은 길게 누르기)해서 저장할 수도 있어요.", outWhy: r => `바로 다운로드할 수 없습니다 (${r}).`,
         denied: "취소되었거나 차단됨", noDownload: "이 앱에서 지원 안 함", copy: "이미지 복사", send: "채팅으로 보내기", close: "닫기",
         copied: "이미지를 복사했어요. 원하는 곳에 붙여넣기(Ctrl+V / ⌘V) 하세요", copyFailed: "여기서는 복사가 막혔어요. 아래 이미지를 우클릭해서 저장하세요", sent: "채팅으로 보냄", sentText: "주석 앱에서 표시한 이미지를 공유했어요. 확인해 주세요.", resized: (w, h) => `큰 이미지를 ${w}×${h}로 줄임`, failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
 };
@@ -78,13 +78,29 @@ function loadBlob(blob) {
     cv.width = Math.max(1, Math.round(img.width * f)); cv.height = Math.max(1, Math.round(img.height * f));
     ctx.drawImage(img, 0, 0, cv.width, cv.height); setZoom(null); undo = []; loaded = true; save(); clearOverlay(); render();
     f < 1 ? log("resized", cv.width, cv.height) : log("loaded", cv.width, cv.height);
-    const data = cv.toDataURL("image/png").split(",")[1];
-    try {
-      await app.updateModelContext({ content: [
-        { type: "image", data, mimeType: "image/png" },
-        { type: "text", text: `User loaded an image ${cv.width}x${cv.height}px into the annotator. Pixel coords, origin top-left.` } ] });
-    } catch (e) { log("failed", e.message); }
+    try { await app.updateModelContext({ content: modelImage("User loaded an image into the annotator.") }); }
+    catch (e) { log("failed", e.message); }
   }).catch(e => log("failed", e.message));
+}
+// Claude caps an app's model context (16,000 tokens, and it counts the image's encoded size),
+// so the model gets a downscaled JPEG preview under a fixed byte budget, never the full PNG.
+// The canvas itself keeps full resolution; coordinates stay in full-image pixels.
+const CTX_B64_MAX = 36000; // base64 chars, about 27 KB; well under the cap even at 3 chars/token
+function modelImage(what) {
+  const c = document.createElement("canvas"), x = c.getContext("2d");
+  let scale = Math.min(1, 1568 / Math.max(cv.width, cv.height)), q = 0.8, data = "";
+  for (let i = 0; i < 12; i++) {
+    c.width = Math.max(1, Math.round(cv.width * scale)); c.height = Math.max(1, Math.round(cv.height * scale));
+    x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(cv, 0, 0, c.width, c.height);
+    data = c.toDataURL("image/jpeg", q).split(",")[1];
+    if (data.length <= CTX_B64_MAX) break;
+    if (q > 0.5) q -= 0.15; else scale *= 0.75;
+  }
+  const f = cv.width / c.width;
+  const note = f > 1.01
+    ? `${what} The real image is ${cv.width}x${cv.height}px; this preview is ${c.width}x${c.height}px. Give mark coordinates in real-image pixels (preview coords x ${f.toFixed(3)}), origin top-left.`
+    : `${what} Image ${cv.width}x${cv.height}px. Pixel coords, origin top-left.`;
+  return [{ type: "image", data, mimeType: "image/jpeg" }, { type: "text", text: note }];
 }
 // Test: does a later widget instance of the same server see the earlier image?
 // Privacy: this copy may still be unredacted, so it expires after 30 minutes and is wiped on export.
@@ -244,9 +260,7 @@ $("send").onclick = async () => {
   try {
     // Claude's ui/message accepts text blocks only (<= 8,000 chars) and may refuse other blocks,
     // so the annotated image goes to the model context and the chat message is text only.
-    await app.updateModelContext({ content: [
-      { type: "image", data: pngB64(), mimeType: "image/png" },
-      { type: "text", text: `Annotated result ${cv.width}x${cv.height}px (the user finished marking the image in the annotator).` } ] });
+    await app.updateModelContext({ content: modelImage("Annotated result: the user finished marking the image in the annotator.") });
     const r = await app.sendMessage({ role: "user", content: [{ type: "text", text: t("sentText") }] });
     if (r?.isError) throw new Error("rejected");
     forget(); log("sent");
