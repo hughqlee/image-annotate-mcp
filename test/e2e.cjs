@@ -64,7 +64,9 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   ok(await fr.isVisible("#send"), "send-to-chat offered when the host accepts messages");
   await fr.click("#send"); await pg.waitForTimeout(150);
   const msg = await pg.evaluate(() => __log.filter(e => e.ev === "message"));
-  ok(msg.length === 1 && msg[0].types.join() === "image,text", "send-to-chat posts the image");
+  ok(msg.length === 1 && msg[0].types.join() === "text", "send-to-chat message is text only (Claude ui/message accepts text blocks only)");
+  const ctxAfter = await pg.evaluate(() => __log.filter(e => e.ev === "ctx"));
+  ok(ctxAfter.length >= 2 && ctxAfter.at(-1).types.join() === "image,text" && ctxAfter.at(-1).bytes > 0, "send-to-chat puts the annotated image in the model context");
   await pg.close();
 
   // 2. drag with preview

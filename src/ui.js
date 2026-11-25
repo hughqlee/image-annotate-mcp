@@ -14,7 +14,7 @@ const T = {
         live: "Applied live marks", exported: "Exported",
         useBelow: "Save from the panel below", outTitle: "Your image", outHint: "Right-click (or long-press) the image to save or copy it.", outWhy: r => `Direct download unavailable (${r}).`,
         denied: "cancelled or blocked", noDownload: "not supported here", copy: "Copy image", send: "Send to chat", close: "Close",
-        copied: "Copied to clipboard", copyFailed: "Copy blocked: right-click the image instead", sent: "Sent to chat", sentText: "Annotated image", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
+        copied: "Copied to clipboard", copyFailed: "Copy blocked: right-click the image instead", sent: "Sent to chat", sentText: "I finished annotating the image. The result is in the annotator app context.", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
   ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", redact: "가리기", undo: "되돌리기", export: "내보내기", fit: "맞춤", color: "색상", strength: "강도",
         hint: "이미지를 붙여넣기(Ctrl+V), 드래그하거나 열어 주세요", connected: "준비됨", loaded: (w, h) => `불러옴 ${w}×${h}`,
         selected: n => `${n}: 드래그로 영역 지정`, applied: (n, w, h) => `${n} 적용 ${w}×${h}`, tooSmall: "영역이 너무 작아 취소됨",
@@ -22,7 +22,7 @@ const T = {
         live: "실시간 표시 적용", exported: "내보냄",
         useBelow: "아래 창에서 저장하세요", outTitle: "완성된 이미지", outHint: "이미지를 우클릭(모바일은 길게 누르기)해서 저장하거나 복사하세요.", outWhy: r => `바로 다운로드할 수 없습니다 (${r}).`,
         denied: "취소되었거나 차단됨", noDownload: "이 앱에서 지원 안 함", copy: "이미지 복사", send: "채팅으로 보내기", close: "닫기",
-        copied: "클립보드에 복사됨", copyFailed: "복사가 막혔습니다. 이미지를 우클릭하세요", sent: "채팅으로 보냄", sentText: "주석 단 이미지", resized: (w, h) => `큰 이미지를 ${w}×${h}로 줄임`, failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
+        copied: "클립보드에 복사됨", copyFailed: "복사가 막혔습니다. 이미지를 우클릭하세요", sent: "채팅으로 보냄", sentText: "이미지 주석을 마쳤어요. 결과 이미지는 주석 앱 컨텍스트에 있습니다.", resized: (w, h) => `큰 이미지를 ${w}×${h}로 줄임`, failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
 };
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 const sysDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
@@ -206,7 +206,7 @@ new ResizeObserver(() => { $("zoomPct").textContent = `${Math.round(shownScale()
 // ---------- export ----------
 // 1) host download (ui/download-file) when the host supports it and it succeeds;
 // 2) otherwise a result panel: the image itself (right-click / long-press to save or copy),
-//    a copy button, and "send to chat" so the image lands in the conversation.
+//    a copy button, and "send to chat" (image -> model context, text-only ui/message).
 const caps = () => app.getHostCapabilities() || {};
 const pngB64 = () => cv.toDataURL("image/png").split(",")[1];
 function showOut(reason) {
@@ -235,7 +235,12 @@ $("copy").onclick = async () => {
 };
 $("send").onclick = async () => {
   try {
-    const r = await app.sendMessage({ role: "user", content: [{ type: "image", data: pngB64(), mimeType: "image/png" }, { type: "text", text: t("sentText") }] });
+    // Claude's ui/message accepts text blocks only (<= 8,000 chars) and may refuse other blocks,
+    // so the annotated image goes to the model context and the chat message is text only.
+    await app.updateModelContext({ content: [
+      { type: "image", data: pngB64(), mimeType: "image/png" },
+      { type: "text", text: `Annotated result ${cv.width}x${cv.height}px (the user finished marking the image in the annotator).` } ] });
+    const r = await app.sendMessage({ role: "user", content: [{ type: "text", text: t("sentText") }] });
     if (r?.isError) throw new Error("rejected");
     forget(); log("sent");
   } catch (e) { log("failed", e.message); }
