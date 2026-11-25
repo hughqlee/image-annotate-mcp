@@ -2,7 +2,7 @@ import { AppBridge, PostMessageTransport } from "@modelcontextprotocol/ext-apps/
 window.__log = [];
 window.startHost = async (html, caps) => {
   const f = document.createElement("iframe");
-  f.sandbox = "allow-scripts allow-same-origin"; f.style.cssText = "width:900px;height:600px";
+  f.sandbox = "allow-scripts allow-same-origin"; f.allow = window.__allow || ""; f.style.cssText = "width:900px;height:600px";
   document.body.appendChild(f);
   const bridge = new AppBridge(null, { name: "TestHost", version: "1" },
     caps || { updateModelContext: { text: {}, image: {} }, downloadFile: {}, serverTools: {} });

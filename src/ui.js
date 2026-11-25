@@ -7,22 +7,22 @@ let loaded = false, tool = "rect", undo = [], start = null;
 
 // ---------- i18n + theme ----------
 const T = {
-  en: { open: "Open image", highlight: "Highlight", rect: "Box", check: "Check", mosaic: "Mosaic", redact: "Redact", undo: "Undo", export: "Export", fit: "Fit", color: "Colour", strength: "Strength",
+  en: { open: "Open image", highlight: "Highlight", rect: "Box", check: "Check", mosaic: "Mosaic", redact: "Redact", undo: "Undo", export: "Save image", exportCopy: "Copy image", fit: "Fit", color: "Colour", strength: "Strength",
         hint: "Paste (Ctrl+V), drop, or open an image", connected: "Ready", loaded: (w, h) => `Loaded ${w}×${h}`,
         selected: n => `${n}: drag to select an area`, applied: (n, w, h) => `${n} applied ${w}×${h}`, tooSmall: "Area too small, cancelled",
         cancelled: "Drag cancelled", agent: "Applied marks from Claude", agentRestored: "Applied marks from Claude (image restored)",
         live: "Applied live marks", exported: "Exported",
         useBelow: "Save from the panel below", outTitle: "Your image", outHint: "Right-click (or long-press) the image to save or copy it.", outWhy: r => `Direct download unavailable (${r}).`,
         denied: "cancelled or blocked", noDownload: "not supported here", copy: "Copy image", send: "Send to chat", close: "Close",
-        copied: "Copied to clipboard", copyFailed: "Copy blocked: right-click the image instead", sent: "Sent to chat", sentText: "I finished annotating the image. The result is in the annotator app context.", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
-  ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", redact: "가리기", undo: "되돌리기", export: "내보내기", fit: "맞춤", color: "색상", strength: "강도",
+        copied: "Image copied. Paste it anywhere (Ctrl+V / ⌘V)", copyFailed: "Copy blocked here. Right-click the image below to save it", sent: "Sent to chat", sentText: "Here is my annotated image from the annotator. Please take a look.", resized: (w, h) => `Large image scaled to ${w}×${h}`, failed: m => `Failed: ${m}`, light: "☀ Light", dark: "☾ Dark", langBtn: "한국어" },
+  ko: { open: "이미지 열기", highlight: "하이라이트", rect: "네모", check: "체크", mosaic: "모자이크", redact: "가리기", undo: "되돌리기", export: "이미지 저장", exportCopy: "이미지 복사", fit: "맞춤", color: "색상", strength: "강도",
         hint: "이미지를 붙여넣기(Ctrl+V), 드래그하거나 열어 주세요", connected: "준비됨", loaded: (w, h) => `불러옴 ${w}×${h}`,
         selected: n => `${n}: 드래그로 영역 지정`, applied: (n, w, h) => `${n} 적용 ${w}×${h}`, tooSmall: "영역이 너무 작아 취소됨",
         cancelled: "드래그 취소", agent: "Claude 표시 적용", agentRestored: "Claude 표시 적용 (이미지 복원)",
         live: "실시간 표시 적용", exported: "내보냄",
         useBelow: "아래 창에서 저장하세요", outTitle: "완성된 이미지", outHint: "이미지를 우클릭(모바일은 길게 누르기)해서 저장하거나 복사하세요.", outWhy: r => `바로 다운로드할 수 없습니다 (${r}).`,
         denied: "취소되었거나 차단됨", noDownload: "이 앱에서 지원 안 함", copy: "이미지 복사", send: "채팅으로 보내기", close: "닫기",
-        copied: "클립보드에 복사됨", copyFailed: "복사가 막혔습니다. 이미지를 우클릭하세요", sent: "채팅으로 보냄", sentText: "이미지 주석을 마쳤어요. 결과 이미지는 주석 앱 컨텍스트에 있습니다.", resized: (w, h) => `큰 이미지를 ${w}×${h}로 줄임`, failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
+        copied: "이미지를 복사했어요. 원하는 곳에 붙여넣기(Ctrl+V / ⌘V) 하세요", copyFailed: "여기서는 복사가 막혔어요. 아래 이미지를 우클릭해서 저장하세요", sent: "채팅으로 보냄", sentText: "주석 앱에서 표시한 이미지를 공유했어요. 확인해 주세요.", resized: (w, h) => `큰 이미지를 ${w}×${h}로 줄임`, failed: m => `실패: ${m}`, light: "☀ 라이트", dark: "☾ 다크", langBtn: "English" },
 };
 const store = { get: k => { try { return localStorage.getItem(k); } catch { return null; } }, set: (k, v) => { try { localStorage.setItem(k, v); } catch {} } };
 const sysDark = () => matchMedia("(prefers-color-scheme: dark)").matches;
@@ -35,6 +35,7 @@ function render() {
   document.documentElement.lang = lang;
   document.documentElement.dataset.theme = theme;
   document.querySelectorAll("[data-i18n]").forEach(el => el.textContent = t(el.dataset.i18n));
+  $("export").textContent = t(caps().downloadFile ? "export" : "exportCopy");
   $("lang").textContent = t("langBtn");
   $("theme").textContent = theme === "dark" ? t("light") : t("dark"); // button shows the mode it switches to
   $("theme").title = theme === "dark" ? "Switch to light" : "Switch to dark";
@@ -209,29 +210,35 @@ new ResizeObserver(() => { $("zoomPct").textContent = `${Math.round(shownScale()
 //    a copy button, and "send to chat" (image -> model context, text-only ui/message).
 const caps = () => app.getHostCapabilities() || {};
 const pngB64 = () => cv.toDataURL("image/png").split(",")[1];
-function showOut(reason) {
+function showOut(msg) {
   $("outImg").src = cv.toDataURL("image/png");
-  $("outWhy").textContent = reason ? t("outWhy", reason) : "";
+  $("outWhy").textContent = msg || "";
   $("send").hidden = !caps().message;
   $("out").hidden = false; $("out").scrollIntoView({ block: "nearest" });
+}
+// One click saves: ui/download-file where the host offers it; otherwise copy the PNG to the
+// clipboard straight from the click (the ClipboardItem takes a promise so the user gesture is kept);
+// only if both fail, show the result panel for right-click save.
+const pngBlob = () => new Promise((res, rej) => cv.toBlob(b => b ? res(b) : rej(new Error("encode failed")), "image/png"));
+async function copyImage() {
+  await navigator.clipboard.write([new ClipboardItem({ "image/png": pngBlob() })]);
 }
 $("export").onclick = async () => {
   if (!loaded) return;
   if (caps().downloadFile) {
     try {
-      const r = await app.downloadFile({ contents: [{ type: "resource", resource: { uri: "file:///annotated.png", mimeType: "image/png", blob: pngB64() } }] });
+      const r = await app.downloadFile({ contents: [{ type: "resource", resource: { uri: "file:///annotated.png", mimeType: "image/png", blob: pngB64() } }] }, { timeout: 600000 });
       if (!r?.isError) { forget(); log("exported"); return; }
-      showOut(t("denied"));
-    } catch (e) { showOut(e.message); }
-  } else showOut(t("noDownload"));
-  log("useBelow");
+      showOut(t("outWhy", t("denied")));
+    } catch (e) { showOut(t("outWhy", e.message)); }
+    log("useBelow"); return;
+  }
+  // the result panel stays as a preview and keeps "Send to chat" one click away
+  try { await copyImage(); forget(); showOut(t("copied")); log("copied"); }
+  catch (e) { showOut(t("copyFailed")); log("copyFailed"); }
 };
 $("copy").onclick = async () => {
-  try {
-    const blob = await new Promise(res => cv.toBlob(res, "image/png"));
-    await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
-    forget(); log("copied");
-  } catch (e) { log("copyFailed"); }
+  try { await copyImage(); forget(); log("copied"); } catch (e) { log("copyFailed"); }
 };
 $("send").onclick = async () => {
   try {
@@ -248,5 +255,5 @@ $("send").onclick = async () => {
 $("closeOut").onclick = () => { $("out").hidden = true; };
 render();
 await app.connect();
-applyHost(app.getHostContext());
+applyHost(app.getHostContext()); render();
 log("connected");

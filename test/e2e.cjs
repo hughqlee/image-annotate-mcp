@@ -13,10 +13,10 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   const srv = http.createServer((q, r) => { const p = path.join(out, q.url.split("?")[0]); fs.existsSync(p) ? r.end(fs.readFileSync(p)) : (r.statusCode = 404, r.end()); }).listen(0);
   const base = `http://localhost:${srv.address().port}/host.html`;
   const b = await chromium.launch();
-  const open = async (opts = {}, caps) => {
+  const open = async (opts = {}, caps, allow = "") => {
     const pg = await b.newPage({ viewport: { width: 1000, height: 700 }, locale: "en-US", colorScheme: "light", ...opts });
     pg.on("pageerror", e => ok(false, "page error: " + e.message));
-    await pg.goto(base); await pg.evaluate(([h, c]) => startHost(h, c), [ui, caps]);
+    await pg.goto(base); await pg.evaluate(([h, c, a]) => { window.__allow = a; startHost(h, c); }, [ui, caps, allow]);
     const fr = pg.frames()[1]; await fr.waitForFunction(() => /Ready|준비됨/.test(document.getElementById("st").textContent));
     return [pg, fr];
   };
@@ -56,17 +56,29 @@ let failures = 0; const ok = (c, m) => { console.log((c ? "PASS " : "FAIL ") + m
   ok(dl.length === 1 && dl[0].mime === "image/png", "export sends PNG via ui/download-file");
   await pg.close();
 
-  // 1b. host without ui/download-file (Claude today): export falls back to the result panel
-  [pg, fr] = await open({}, { updateModelContext: { text: {}, image: {} }, message: { text: {}, image: {} } });
+  // 1b. host without ui/download-file (Claude today), clipboard granted: one click copies the PNG
+  const noDl = { updateModelContext: { text: {}, image: {} }, message: { text: {}, image: {} } };
+  [pg, fr] = await open({ permissions: ["clipboard-read", "clipboard-write"] }, noDl, "clipboard-write");
   await fr.setInputFiles("#file", img); await fr.waitForFunction(() => /Loaded/.test(document.getElementById("st").textContent));
-  await fr.click("#export"); await pg.waitForTimeout(150);
-  ok(await fr.isVisible("#out") && (await fr.getAttribute("#outImg", "src")).startsWith("data:image/png;base64,"), "no download support: result panel shows the image");
+  ok(/Copy image/.test(await fr.textContent("#export")), "no download support: the button says Copy image");
+  await fr.click("#export"); await pg.waitForTimeout(300);
+  ok(/Image copied/.test(await st(fr)), "one click copies the image: " + await st(fr));
+  const clip = await fr.evaluate(async () => { const it = await navigator.clipboard.read(); return it[0].types.join(); });
+  ok(clip.includes("image/png"), "clipboard holds image/png");
+  ok(await fr.isVisible("#out") && (await fr.getAttribute("#outImg", "src")).startsWith("data:image/png;base64,"), "result panel still shows the image");
   ok(await fr.isVisible("#send"), "send-to-chat offered when the host accepts messages");
   await fr.click("#send"); await pg.waitForTimeout(150);
   const msg = await pg.evaluate(() => __log.filter(e => e.ev === "message"));
   ok(msg.length === 1 && msg[0].types.join() === "text", "send-to-chat message is text only (Claude ui/message accepts text blocks only)");
   const ctxAfter = await pg.evaluate(() => __log.filter(e => e.ev === "ctx"));
   ok(ctxAfter.length >= 2 && ctxAfter.at(-1).types.join() === "image,text" && ctxAfter.at(-1).bytes > 0, "send-to-chat puts the annotated image in the model context");
+  await pg.close();
+
+  // 1c. clipboard not granted: the click falls back to the right-click panel
+  [pg, fr] = await open({}, noDl);
+  await fr.setInputFiles("#file", img); await fr.waitForFunction(() => /Loaded/.test(document.getElementById("st").textContent));
+  await fr.click("#export"); await pg.waitForTimeout(300);
+  ok(/Copy blocked/.test(await st(fr)) && await fr.isVisible("#out"), "copy blocked: panel offers right-click save (" + await st(fr) + ")");
   await pg.close();
 
   // 2. drag with preview
