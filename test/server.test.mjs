@@ -25,7 +25,7 @@ if (!isErr(bad) || !isErr(bad2) || big.status !== 413) process.exit(1);
   const fs = await import("node:fs");
   const checks = [
     [init.title && init.version && init.icons?.length && init.websiteUrl, "serverInfo has title, version, websiteUrl, icons: " + init.name],
-    [tools.every(t => t.title && t.annotations && ["readOnlyHint", "destructiveHint", "openWorldHint"].every(k => typeof t.annotations[k] === "boolean")), "every tool has a title and explicit hints"],
+    [tools.every(t => t.title && t.annotations?.title === t.title && ["readOnlyHint", "destructiveHint", "openWorldHint"].every(k => typeof t.annotations[k] === "boolean")), "every tool has a title (top-level and in annotations) and explicit hints"],
     [["index.html", "privacy.html", "terms.html", "icon.png", "icon.svg", "screenshot.png"].every(f => fs.existsSync("public/" + f)), "public guide, privacy, terms, icon, screenshot built"],
     [JSON.parse(fs.readFileSync("server.json", "utf8")).version === init.version, "server.json version matches the server"],
   ];
